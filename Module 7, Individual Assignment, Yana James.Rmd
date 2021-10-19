@@ -1,0 +1,225 @@
+---
+title: "Module 7, Individual Assignement, Yana James"
+output: html_notebook
+---
+
+```{r}
+library(pacman)
+p_load(tidyverse, lubridate, broom, car)
+WM <- read.csv("walMart.csv")
+
+WM <- WM %>% filter(Store == 1 & Dept == 7)
+WM <- WM %>% mutate(Date = lubridate::ymd(Date), month = lubridate::month(Date))
+
+WM %>%  ggplot(aes(x=Date, y=Weekly_Sales)) +  geom_line()
+
+WM %>%  ggplot(aes(x=Date, y=Weekly_Sales)) +  geom_smooth()
+
+WM %>%  ggplot(aes(x=Date, y=Weekly_Sales)) +  geom_line()+  geom_smooth()
+```
+
+```{r}
+WM %>% group_by(month) %>% summarize(AvgSales = mean(Weekly_Sales)) %>% ggplot(aes(x=month, y=AvgSales)) + geom_line()
+WM %>% group_by(IsHoliday) %>% summarize(AvgSales = mean(Weekly_Sales))
+
+```
+```{r}
+WM <- WM %>%  mutate(Week_Number = row_number())
+
+Train <- WM %>% slice(1:104)
+Test <- WM %>% slice(105:nrow(WM))
+```
+
+Regression Model:
+```{r}
+lm1 <- lm(Weekly_Sales ~ Week_Number + as.factor(month) + as.factor(IsHoliday), data=Train)
+summary(lm1)
+```
+
+Predict and evaluate:
+```{r}
+Predicted_Sales <- predict(lm1, newdata=Test)
+Test <- Test %>% add_column(Predicted_Sales)
+view(Test)
+
+Test %>% select(Date, Weekly_Sales, Predicted_Sales) %>% gather(-Date, key=key, value=Weekly_Sales) %>% ggplot(aes(x=Date, y=Weekly_Sales, color=key)) + geom_line()
+Test <- Test %>% mutate(Error = Weekly_Sales - Predicted_Sales)
+
+Test %>% summarize(MAE = mean(abs(Error)))
+```
+```{r}
+Train <- Train %>% mutate(Weekly_Sales_1 = lag(Weekly_Sales, 1),
+                          Weekly_Sales_2 = lag(Weekly_Sales, 2),
+                          Weekly_Sales_3 = lag(Weekly_Sales, 3),
+                          Weekly_Sales_4 = lag(Weekly_Sales, 4),
+                          Weekly_Sales_5 = lag(Weekly_Sales, 5),
+                          Weekly_Sales_6 = lag(Weekly_Sales, 6),
+                          Weekly_Sales_7 = lag(Weekly_Sales, 7)
+                          )
+
+Test <- Test %>% mutate(Weekly_Sales_1 = lag(Weekly_Sales, 1),
+                          Weekly_Sales_2 = lag(Weekly_Sales, 2),
+                          Weekly_Sales_3 = lag(Weekly_Sales, 3),
+                          Weekly_Sales_4 = lag(Weekly_Sales, 4),
+                          Weekly_Sales_5 = lag(Weekly_Sales, 5),
+                          Weekly_Sales_6 = lag(Weekly_Sales, 6),
+                          Weekly_Sales_7 = lag(Weekly_Sales, 7)
+                          )
+
+
+head(Train, n=10)
+```
+
+```{r}
+durbinWatsonTest(lm1)
+plot(residuals(lm1), type="o")
+abline(0,0)
+```
+
+```{r}
+lm2 <- lm(Weekly_Sales ~ Week_Number + as.factor(month) + as.factor(IsHoliday) + Weekly_Sales_1 + Weekly_Sales_2 + Weekly_Sales_3 + Weekly_Sales_4 + Weekly_Sales_5 + Weekly_Sales_6 + Weekly_Sales_7, data=Train) 
+summary(lm2)
+
+Predicted_Sales_2 <- predict(lm2, newdata=Test)
+Test <- Test %>% add_column(Predicted_Sales_2)
+
+
+Test %>% select(Date, Weekly_Sales, Predicted_Sales_2) %>% gather(-Date, key=key, value=Weekly_Sales) %>% ggplot(aes(x=Date, y=Weekly_Sales, color=key)) + geom_line()
+
+Test <- Test %>% mutate(Error2 = Weekly_Sales - Predicted_Sales_2)
+
+Test %>% summarize(MAE = mean(abs(Error2), na.rm=TRUE))
+
+durbinWatsonTest(lm2)
+```
+
+
+```{r}
+Train <- Train %>% mutate(LogWeekly_Sales = log(Weekly_Sales))
+Test <- Test %>% mutate(LogWeekly_Sales = log(Weekly_Sales))
+lm3 <- lm(LogWeekly_Sales ~ Week_Number + as.factor(month) + as.factor(IsHoliday) + Weekly_Sales_1 + Weekly_Sales_2 + Weekly_Sales_3 + Weekly_Sales_4 + Weekly_Sales_5 + Weekly_Sales_6 + Weekly_Sales_7, data=Train) 
+summary(lm3)
+```
+
+```{r}
+LogPred_Weekly_Sales <- predict(lm3, newdata=Test)
+Predicted_Sales_3 <- exp(LogPred_Weekly_Sales)
+Test <- Test %>% add_column(Predicted_Sales_3)
+
+Test %>% select(Date, Weekly_Sales, Predicted_Sales_3) %>% gather(-Date, key=key, value=Weekly_Sales) %>% ggplot(aes(x=Date, y=Weekly_Sales, color=key)) + geom_line()
+
+
+Test <- Test %>% mutate(Error3 = Weekly_Sales - Predicted_Sales_3)
+
+Test %>% summarize(MAE = mean(abs(Error3), na.rm=TRUE))
+
+durbinWatsonTest(lm3)
+```
+
+```{r}
+lm4 <- lm(LogWeekly_Sales ~ Week_Number + as.factor(month) + as.factor(IsHoliday), data=Train) 
+summary(lm4)
+```
+
+```{r}
+LogPred_Weekly_Sales_1 <- predict(lm4, newdata=Test)
+Predicted_Sales_4 <- exp(LogPred_Weekly_Sales_1)
+Test <- Test %>% add_column(Predicted_Sales_4)
+
+Test %>% select(Date, Weekly_Sales, Predicted_Sales_4) %>% gather(-Date, key=key, value=Weekly_Sales) %>% ggplot(aes(x=Date, y=Weekly_Sales, color=key)) + geom_line()
+
+
+Test <- Test %>% mutate(Error4 = Weekly_Sales - Predicted_Sales_4)
+
+Test %>% summarize(MAE = mean(abs(Error4), na.rm=TRUE))
+
+durbinWatsonTest(lm4)
+```
+
+```{r}
+p_load(forecast)
+```
+
+```{r}
+Train_ts <- WM %>% slice(1:104)
+Test_ts <- WM %>% slice(105:nrow(WM))
+```
+
+```{r}
+train.ts <- Train_ts %>% select(Weekly_Sales) %>% ts(frequency = 52, start=c(2010,2), end =c(2012,1))
+train.ts
+```
+
+```{r}
+plot.ts(train.ts,main = "Weekly Sales", col = "blue")
+
+```
+
+```{r}
+fitM <- HoltWinters(train.ts, seasonal = "multiplicative")
+fitA <- HoltWinters(train.ts, seasonal = "additive")
+fitA
+fitM
+fitted(fitM)
+fitted(fitA)
+```
+
+
+```{r}
+predictM <- forecast(fitM, h=39)
+predictA <- forecast(fitA, h=39)
+predictM
+predictA
+```
+```{r}
+PredA <- as.numeric(predictA$mean)
+PredM <- as.numeric(predictM$mean)
+
+ErrorA <- Test_ts$Weekly_Sales - PredA
+ErrorM <- Test_ts$Weekly_Sales - PredM
+
+plot(PredA, Test_ts$Weekly_Sales)
+abline(0,1)
+
+plot(PredM, Test_ts$Weekly_Sales)
+abline(0,1)
+
+DF <- data.frame(Test_ts$Weekly_Sales, PredA, PredM)
+names(DF) <- c("WeeklySales", "Add_Pred", "Mult_Pred")
+
+DF <- DF %>% mutate (Add_Error = WeeklySales - Add_Pred,
+                     Mult_Error = WeeklySales - Mult_Pred,
+                     Add_Pct_Err = (WeeklySales - Add_Pred)/WeeklySales,
+                     Mult_Pct_Err = (WeeklySales - Mult_Pred)/WeeklySales)
+
+DF %>% summarize(MAPE_Add = mean(abs(Add_Pct_Err)),
+                 MAPE_Mult = mean(abs(Mult_Pct_Err)),
+                 MAE = mean(abs(Add_Error)),
+                 MME = mean(abs(Mult_Error)))
+
+
+```
+
+```{r}
+plot.ts(train.ts[50:101],main = "Weekly_Sales", col = "blue", lwd=2)
+lines(fitted(fitA)[1:52], col="red")
+lines(fitted(fitM)[1:52], col="green")
+```
+
+```{r}
+fit <- tbats(WM.ts)
+fc <- forecast(fit, h=52)
+fc
+fc$model
+```
+
+```{r}
+plot(fc, ylab="Weekly Sales")
+```
+
+```{r}
+res <- residuals(fit)
+mae <- mean(abs(res))
+mae
+```
+
