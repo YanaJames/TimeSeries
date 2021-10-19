@@ -1,0 +1,3 @@
+# TimeSeries
+Time Series analysis of weekly sales at Walmart
+You have information on weekly sales for 45 WalMart stores, across each of their departments, provided in a WalMart.csv data file. You have been tasked with predicting the weekly sales performance of each department over the next year.  First, you need to come up with a forecasting method for Department 7 at Store 1. The goal is to build the best performing time series model to predict the forecasting performance for each of the next 52 weeks and to plot the real data and predicted data in the same graph, making it clear where the real data ends and your forecast begins.
